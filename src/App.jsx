@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import _ from 'lodash';
 
-// Mock data for places, activities, and restaurants
+// Mock data remains the same as before
 const mockPlaces = {
   attractions: [
     { name: "Central Park", type: "park", rating: 4.8, busyTimes: { morning: 60, afternoon: 90, evening: 70 }, timeNeeded: 120, location: [40.7829, -73.9654] },
@@ -18,12 +18,11 @@ const mockPlaces = {
   ]
 };
 
-// Mock user preferences
 const userPreferences = {
   cuisine: ["vegetarian", "indian"],
   priceRange: 2,
-  maxDistance: 2000, // meters
-  location: [40.7831, -73.9712], // Current location
+  maxDistance: 2000,
+  location: [40.7831, -73.9712],
 };
 
 const VoiceAssistant = () => {
@@ -31,15 +30,28 @@ const VoiceAssistant = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
+  const [error, setError] = useState("");
   const [recognition, setRecognition] = useState(null);
 
   useEffect(() => {
-    // Initialize speech recognition
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    // Check if browser supports speech recognition
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setError("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+      return;
+    }
+
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
+      
       recognition.continuous = false;
       recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setError("");
+      };
       
       recognition.onresult = (event) => {
         const last = event.results.length - 1;
@@ -51,6 +63,11 @@ const VoiceAssistant = () => {
       recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setError("Microphone access was denied. Please allow microphone access and try again.");
+        } else {
+          setError(`Error: ${event.error}`);
+        }
       };
 
       recognition.onend = () => {
@@ -58,36 +75,63 @@ const VoiceAssistant = () => {
       };
 
       setRecognition(recognition);
+    } catch (err) {
+      console.error('Error initializing speech recognition:', err);
+      setError("Failed to initialize speech recognition. Please use Chrome or Edge.");
     }
   }, []);
 
   const speak = (text) => {
+    if (!('speechSynthesis' in window)) {
+      setError("Speech synthesis is not supported in this browser. Please use Chrome or Edge.");
+      setResponse(text); // Still show the text response
+      return;
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setError("Error speaking response. Please try again.");
+    };
+    
     window.speechSynthesis.speak(utterance);
     setResponse(text);
   };
 
-  const toggleListening = () => {
-    if (isListening) {
-      recognition?.stop();
-    } else {
-      recognition?.start();
-      setIsListening(true);
+  const toggleListening = async () => {
+    if (!recognition) {
+      setError("Speech recognition is not available. Please use Chrome or Edge.");
+      return;
+    }
+
+    try {
+      if (isListening) {
+        recognition.stop();
+      } else {
+        // Request microphone permission
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+        
+        setError("");
+        recognition.start();
+      }
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      setError("Microphone access was denied. Please allow microphone access and try again.");
+      setIsListening(false);
     }
   };
 
+  // Command processing functions remain the same as before
   const processCommand = (command) => {
-    // Plan weekend/day
     if (command.includes("plan my") && (command.includes("weekend") || command.includes("sunday") || command.includes("saturday"))) {
       planDay();
     }
-    // Find lunch/dinner place
     else if (command.includes("find") && (command.includes("lunch") || command.includes("dinner") || command.includes("place to eat"))) {
       findRestaurant();
     }
-    // Time-based exploration
     else if (command.includes("hours") && command.includes("explore")) {
       const hours = parseInt(command.match(/\d+/)?.[0] || 3);
       planTimeBasedExploration(hours);
@@ -140,11 +184,11 @@ const VoiceAssistant = () => {
     const sortedPlaces = _.sortBy(mockPlaces.attractions, [(place) => -place.rating]);
     
     for (const place of sortedPlaces) {
-      if (remainingTime >= place.timeNeeded + 30) { // Including 30 mins buffer for travel
+      if (remainingTime >= place.timeNeeded + 30) {
         schedule.push(place);
         remainingTime -= (place.timeNeeded + 30);
       }
-      if (remainingTime < 60) break; // Stop if less than an hour remains
+      if (remainingTime < 60) break;
     }
 
     const response = `For your ${hours}-hour exploration, I suggest: Start at ${schedule[0].name} (${schedule[0].timeNeeded} minutes), then visit ${schedule[1].name} (${schedule[1].timeNeeded} minutes)${schedule[2] ? `, and if time permits, check out ${schedule[2].name}` : ''}. This plan includes travel time between locations.`;
@@ -166,10 +210,17 @@ const VoiceAssistant = () => {
           </ul>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-red-600">{error}</p>
+          </div>
+        )}
+
         <div className="flex flex-col items-center space-y-4">
           <button
             onClick={toggleListening}
             className={`p-4 rounded-full ${isListening ? 'bg-red-500' : 'bg-blue-500'} text-white shadow-lg hover:opacity-90 transition-opacity`}
+            disabled={!recognition}
           >
             {isListening ? <MicOff size={24} /> : <Mic size={24} />}
           </button>
