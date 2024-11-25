@@ -323,19 +323,64 @@ const EnhancedVoiceAssistant = () => {
 
           {/* Command Examples */}
           <div className="mt-8">
-            <h3 className="font-medium text-gray-700 mb-2">Try saying:</h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li>"Navigate to Downtown"</li>
-              <li>"Take me to Central Park"</li>
-              <li>"Yes, I want to arrive by 3 PM"</li>
-              <li>"Yes, please plan some breaks"</li>
-            </ul>
+            <h3 className="font-medium text-gray-700 mb-2">Available Commands:</h3>
+            <div className="space-y-4">
+              {/* Navigation Commands */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">Navigation:</h4>
+                <ul className="space-y-1 text-sm text-gray-600 pl-4">
+                  <li>"Navigate to [destination]"</li>
+                  <li>"Take me to [place name]"</li>
+                  <li>"Drive to [location]"</li>
+                </ul>
+              </div>
+
+              {/* Time Preferences */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">Time Preferences:</h4>
+                <ul className="space-y-1 text-sm text-gray-600 pl-4">
+                  <li>"Yes, arrive by [time]" (e.g., "3 PM", "15:30")</li>
+                  <li>"No specific time"</li>
+                  <li>"Need to be there by [time]"</li>
+                </ul>
+              </div>
+
+              {/* Route Preferences */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">Route Preferences:</h4>
+                <ul className="space-y-1 text-sm text-gray-600 pl-4">
+                  <li>"Yes, prefer well-lit roads"</li>
+                  <li>"Avoid highways"</li>
+                  <li>"Take the fastest route"</li>
+                </ul>
+              </div>
+
+              {/* Break Planning */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">Break Planning:</h4>
+                <ul className="space-y-1 text-sm text-gray-600 pl-4">
+                  <li>"Yes, plan some breaks"</li>
+                  <li>"Include rest stops"</li>
+                  <li>"No breaks needed"</li>
+                </ul>
+              </div>
+
+              {/* During Navigation */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">During Navigation:</h4>
+                <ul className="space-y-1 text-sm text-gray-600 pl-4">
+                  <li>"Find a rest stop"</li>
+                  <li>"How much longer?"</li>
+                  <li>"Change route"</li>
+                  <li>"Avoid upcoming traffic"</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 };
-
 
 export default EnhancedVoiceAssistant;
