@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, MapPin, Clock, Umbrella, Coffee } from 'lucide-react';
 
-// Mock data for places and weather
-const mockPlaces = {
-  attractions: [
-    { name: "Central Park", type: "park", rating: 4.8, busyTimes: { morning: 60, afternoon: 90, evening: 70 }, timeNeeded: 120, location: [40.7829, -73.9654] },
-    { name: "Art Museum", type: "museum", rating: 4.6, busyTimes: { morning: 40, afternoon: 80, evening: 30 }, timeNeeded: 90, location: [40.7794, -73.9632] }
-  ],
-  restaurants: [
-    { name: "Green Leaf", type: "restaurant", cuisine: "vegetarian", priceLevel: 2, rating: 4.5, busyTimes: { morning: 30, afternoon: 80, evening: 90 }, avgMealTime: 45, location: [40.7834, -73.9723] },
-    { name: "Spice Route", type: "restaurant", cuisine: "indian", priceLevel: 3, rating: 4.7, busyTimes: { morning: 20, afternoon: 70, evening: 95 }, avgMealTime: 60, location: [40.7821, -73.9701] }
-  ]
-};
-
 const mockWeather = {
   condition: 'rainy',
   temperature: 18,
@@ -20,7 +8,7 @@ const mockWeather = {
   isNight: false
 };
 
-const EnhancedVoiceAssistant = () => {
+const VoiceAssistant = () => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -44,6 +32,19 @@ const EnhancedVoiceAssistant = () => {
     stage: 'initial'
   });
 
+  const conversationalResponse = (type, details) => {
+    const responses = {
+      initial_planning: `I'll help you get to ${details.destination}. What time would you like to arrive? You can say a specific time like '3:30 PM' or say 'no specific time'.`,
+      weather_check: `Perfect. Since it's ${mockWeather.condition} today, would you like me to find a route with good visibility and well-lit roads?`,
+      break_suggestion: `This journey will take about ${details.duration} minutes. Would you like me to plan any rest stops along the way?`,
+      route_confirmation: `Great! I've found a route that will get you there in ${details.duration} minutes${
+        drivingPreferences.avoidHighways ? ' avoiding highways' : ''
+      }. Ready to start navigation?`,
+      final_confirmation: `Starting navigation now. I'll keep you updated about weather conditions and breaks along the way.`
+    };
+    return responses[type] || details;
+  };
+
   useEffect(() => {
     if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
       setError("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
@@ -59,26 +60,33 @@ const EnhancedVoiceAssistant = () => {
       recognitionInstance.lang = 'en-US';
 
       recognitionInstance.onstart = () => {
+        console.log('Started listening...');
         setIsListening(true);
         setError("");
       };
       
       recognitionInstance.onresult = (event) => {
         const last = event.results.length - 1;
-        const command = event.results[last][0].transcript.toLowerCase();
+        const command = event.results[last][0].transcript;
+        console.log('Heard command:', command);
         setTranscript(command);
         processCommand(command);
+        recognitionInstance.stop();
       };
 
       recognitionInstance.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
-        setError(event.error === 'not-allowed' 
-          ? "Microphone access was denied. Please allow microphone access and try again."
-          : `Error: ${event.error}`);
+        if (event.error === 'not-allowed') {
+          setError("Microphone access was denied. Please allow microphone access and try again.");
+        } else {
+          setError(`Error: ${event.error}`);
+        }
+        recognitionInstance.stop();
       };
 
       recognitionInstance.onend = () => {
+        console.log('Stopped listening.');
         setIsListening(false);
       };
 
@@ -89,110 +97,57 @@ const EnhancedVoiceAssistant = () => {
     }
   }, []);
 
-  const conversationalResponse = (type, details) => {
-    const responses = {
-      initial_planning: `I'll help you get to ${details.destination}. Would you like to arrive by a specific time? You can say 'no specific time' or specify a time like '3 PM'.`,
-      weather_check: `Great. I notice it's ${mockWeather.condition}. Would you prefer a route with good visibility and well-lit roads?`,
-      break_suggestion: `This will be a ${details.duration} minute trip. Would you like me to plan any breaks along the way?`,
-      route_confirmation: `I've found a route that matches your preferences. It will take about ${details.duration} minutes${
-        drivingPreferences.avoidHighways ? ' avoiding highways' : ''
-      }. Would you like to hear about potential stops?`,
-      final_confirmation: `Great! I'll start navigation now. I'll notify you about breaks and conditions along the way.`
-    };
-    return responses[type] || details;
-  };
-
-  // Intent recognition patterns
-  const intents = {
-    navigation: {
-      patterns: [
-        /(?:navigate|take me|drive|go) to (.*)/i,
-        /directions? to (.*)/i,
-        /how (?:do i|to) get to (.*)/i,
-      ]
-    },
-    timePreference: {
-      patterns: [
-        /(?:arrive|be there) by (\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)/i,
-        /(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))/i,
-        /(\d{1,2})[:\s](\d{2})/i,
-        /^(\d{1,2})(?:\s*(?:a\.?m\.?|p\.?m\.?))?$/i
-      ],
-      negativePatterns: [
-        /no(?: specific)? time/i,
-        /doesn'?t matter/i,
-        /any ?time/i,
-        /^no$/i
-      ]
-    },
-    // ... rest of the intents remain the same ...
-  };
-
   const processCommand = (command) => {
     const lowerCommand = command.toLowerCase();
     console.log('Processing command:', lowerCommand);
     console.log('Current context:', conversationContext);
 
-    // If we're already in a planning session and at the time preference stage
+    // Navigation command handling
+    if (!conversationContext.isPlanning && 
+        (lowerCommand.includes('navigate to') || 
+         lowerCommand.includes('take me to') || 
+         lowerCommand.includes('drive to'))) {
+      const destination = lowerCommand
+        .replace(/(navigate to|take me to|drive to)/i, '')
+        .trim();
+      setConversationContext({
+        isPlanning: true,
+        destination,
+        hasAskedPreferences: false,
+        currentTripDuration: null,
+        stage: 'initial'
+      });
+      speak(conversationalResponse('initial_planning', { destination }));
+      return;
+    }
+
+    // Time preference handling
     if (conversationContext.isPlanning && conversationContext.stage === 'initial') {
-      // First, check for time patterns
-      for (const pattern of intents.timePreference.patterns) {
-        const match = command.match(pattern);
-        if (match) {
-          const time = match[1];
-          console.log('Time matched:', time);
-          setDrivingPreferences(prev => ({
-            ...prev,
-            arrivalTime: time
-          }));
-          setConversationContext(prev => ({ 
-            ...prev,
-            stage: 'weather',
-            hasAskedPreferences: true 
-          }));
-          speak(conversationalResponse('weather_check', {}));
-          return;
-        }
+      if (lowerCommand.includes('no specific time') || lowerCommand === 'no') {
+        setConversationContext(prev => ({ ...prev, stage: 'weather' }));
+        speak(conversationalResponse('weather_check', {}));
+        return;
       }
-      
-      // Check for negative time responses
-      for (const pattern of intents.timePreference.negativePatterns) {
-        if (pattern.test(lowerCommand)) {
-          setConversationContext(prev => ({ 
-            ...prev, 
-            stage: 'weather',
-            hasAskedPreferences: true 
-          }));
-          speak(conversationalResponse('weather_check', {}));
-          return;
-        }
+
+      const timePattern = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
+      const timeMatch = lowerCommand.match(timePattern);
+      if (timeMatch) {
+        setDrivingPreferences(prev => ({
+          ...prev,
+          arrivalTime: timeMatch[1]
+        }));
+        setConversationContext(prev => ({ ...prev, stage: 'weather' }));
+        speak(conversationalResponse('weather_check', {}));
+        return;
       }
     }
 
-    // If not a time response and we're not planning yet, check for navigation intent
-    if (!conversationContext.isPlanning) {
-      for (const pattern of intents.navigation.patterns) {
-        const match = lowerCommand.match(pattern);
-        if (match) {
-          const destination = match[1].trim();
-          setConversationContext({
-            isPlanning: true,
-            destination,
-            stage: 'initial',
-            hasAskedPreferences: false
-          });
-          speak(conversationalResponse('initial_planning', { destination }));
-          return;
-        }
-      }
-    }
-
-    // Weather/Route preference processing
+    // Weather/Route preference handling
     if (conversationContext.stage === 'weather') {
-      const wellLitMatch = lowerCommand.includes('yes') || lowerCommand.includes('prefer');
+      const wantsWellLit = lowerCommand.includes('yes') || lowerCommand.includes('prefer');
       setDrivingPreferences(prev => ({
         ...prev,
-        preferWellLit: wellLitMatch
+        preferWellLit: wantsWellLit
       }));
       const duration = Math.floor(Math.random() * 60) + 30;
       setConversationContext(prev => ({
@@ -204,7 +159,7 @@ const EnhancedVoiceAssistant = () => {
       return;
     }
 
-    // Break preference processing
+    // Break preference handling
     if (conversationContext.stage === 'breaks') {
       const wantsBreaks = lowerCommand.includes('yes') || lowerCommand.includes('please');
       setDrivingPreferences(prev => ({
@@ -221,205 +176,49 @@ const EnhancedVoiceAssistant = () => {
       return;
     }
 
-    // Provide context-specific help if the command wasn't recognized
+    // Final confirmation
+    if (conversationContext.stage === 'confirmation' && 
+       (lowerCommand.includes('yes') || lowerCommand.includes('start'))) {
+      speak(conversationalResponse('final_confirmation', {}));
+      setConversationContext(prev => ({
+        ...prev,
+        stage: 'navigating'
+      }));
+      return;
+    }
+
+    // Handle unrecognized commands
     if (conversationContext.isPlanning) {
       switch (conversationContext.stage) {
         case 'initial':
-          speak("I heard you want to arrive by " + command + ". Just to confirm, is that your desired arrival time? Or you can say 'no specific time'.");
+          speak("Please let me know your time preference. You can say a specific time like '3 PM' or 'no specific time'.");
           break;
         case 'weather':
-          speak("Would you like a route with good visibility and well-lit roads? Just say 'yes' or 'no'.");
+          speak("Would you like a route with good visibility and well-lit roads? Please say 'yes' or 'no'.");
           break;
         case 'breaks':
-          speak("Should I plan rest stops along the way? You can say 'yes' or 'no'.");
+          speak("Would you like me to plan breaks along the route? Please say 'yes' or 'no'.");
           break;
         default:
-          speak("I didn't catch that. Could you please try rephrasing?");
+          speak("I didn't understand that. What would you like to do?");
       }
     } else {
-      speak("You can start by saying something like 'Navigate to Central Park' or 'Take me to the airport'.");
-    }
-  };
-    routePreference: {
-      wellLit: [
-        /(?:yes|yeah|sure).*(?:well[- ]?lit|visibility)/i,
-        /prefer (?:well[- ]?lit|better visibility)/i,
-        /^yes$/i
-      ],
-      avoidHighways: [
-        /(?:avoid|no|skip) highways?/i,
-        /(?:local|side|smaller) roads?/i
-      ]
-    },
-    breaks: {
-      patterns: [
-        /(?:yes|yeah|sure).*breaks?/i,
-        /(?:plan|include|add) (?:some )?breaks?/i,
-        /^yes$/i
-      ],
-      negativePatterns: [
-        /no breaks?/i,
-        /don'?t (?:need|want) breaks?/i,
-        /^no$/i
-      ]
-    }
-  };
-
-  // Intent recognition function
-  const recognizeIntent = (text, intentPatterns) => {
-    for (const pattern of intentPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return match;
-      }
-    }
-    return null;
-  };
-
-  const processCommand = (command) => {
-    const lowerCommand = command.toLowerCase();
-    console.log('Processing command:', lowerCommand);
-    console.log('Current context:', conversationContext);
-
-    // Navigation intent
-    if (!conversationContext.isPlanning) {
-      for (const pattern of intents.navigation.patterns) {
-        const match = lowerCommand.match(pattern);
-        if (match) {
-          const destination = match[1].trim();
-          setConversationContext({
-            isPlanning: true,
-            destination,
-            stage: 'initial'
-          });
-          speak(conversationalResponse('initial_planning', { destination }));
-          return;
-        }
-      }
-    }
-
-    // Time preference intent
-    if (conversationContext.isPlanning && conversationContext.stage === 'initial') {
-      // Check for negative time preference first
-      const noTimeMatch = recognizeIntent(lowerCommand, intents.timePreference.negativePatterns);
-      if (noTimeMatch) {
-        setConversationContext(prev => ({ ...prev, stage: 'weather' }));
-        speak(conversationalResponse('weather_check', {}));
-        return;
-      }
-
-      // Check for specific time
-      for (const pattern of intents.timePreference.patterns) {
-        const match = lowerCommand.match(pattern);
-        if (match) {
-          const time = match[1];
-          setDrivingPreferences(prev => ({
-            ...prev,
-            arrivalTime: time
-          }));
-          setConversationContext(prev => ({ ...prev, stage: 'weather' }));
-          speak(conversationalResponse('weather_check', {}));
-          return;
-        }
-      }
-    }
-
-    // Weather/Route preference intent
-    if (conversationContext.stage === 'weather') {
-      const wellLitMatch = recognizeIntent(lowerCommand, intents.routePreference.wellLit);
-      if (wellLitMatch || lowerCommand.includes('no')) {
-        setDrivingPreferences(prev => ({
-          ...prev,
-          preferWellLit: !!wellLitMatch
-        }));
-        setConversationContext(prev => ({
-          ...prev,
-          stage: 'breaks',
-          currentTripDuration: Math.floor(Math.random() * 60) + 30
-        }));
-        speak(conversationalResponse('break_suggestion', { 
-          duration: conversationContext.currentTripDuration 
-        }));
-        return;
-      }
-    }
-
-    // Break preference intent
-    if (conversationContext.stage === 'breaks') {
-      const wantsBreaks = recognizeIntent(lowerCommand, intents.breaks.patterns);
-      const noBreaks = recognizeIntent(lowerCommand, intents.breaks.negativePatterns);
-      
-      if (wantsBreaks || noBreaks) {
-        setDrivingPreferences(prev => ({
-          ...prev,
-          needsFrequentBreaks: !!wantsBreaks
-        }));
-        setConversationContext(prev => ({
-          ...prev,
-          stage: 'confirmation'
-        }));
-        speak(conversationalResponse('route_confirmation', {
-          duration: conversationContext.currentTripDuration
-        }));
-        return;
-      }
-    }
-
-    // Confirmation intent
-    if (conversationContext.stage === 'confirmation') {
-      if (lowerCommand.includes('yes') || lowerCommand.includes('start') || lowerCommand.includes('okay')) {
-        speak(conversationalResponse('final_confirmation', {}));
-        setConversationContext(prev => ({
-          ...prev,
-          stage: 'navigating'
-        }));
-        return;
-      }
-    }
-
-    // Context-specific help messages for unrecognized commands
-    if (conversationContext.isPlanning) {
-      switch (conversationContext.stage) {
-        case 'initial':
-          speak("I'm waiting for your time preference. You can say something like '3:30 PM' or 'no specific time'.");
-          break;
-        case 'weather':
-          speak("Would you like a route with good visibility and well-lit roads? Just say 'yes' or 'no'.");
-          break;
-        case 'breaks':
-          speak("Should I plan rest stops along the way? You can say 'yes' or 'no'.");
-          break;
-        case 'confirmation':
-          speak("Should I start the navigation now? Say 'yes' to begin.");
-          break;
-        default:
-          speak("I didn't catch that. Could you please try rephrasing?");
-      }
-    } else {
-      speak("You can start by saying something like 'Navigate to Central Park' or 'Take me to the airport'.");
+      speak("You can start by saying 'Navigate to [destination]' or 'Take me to [place]'.");
     }
   };
 
   const speak = (text) => {
     try {
       setResponse(text);
-
       if (!window.speechSynthesis) {
-        setError("Speech synthesis not supported in this browser");
+        setError("Speech synthesis not supported");
         return;
       }
 
       window.speechSynthesis.cancel();
-
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = (e) => {
-        console.error("Speech synthesis error:", e);
-        setError("Failed to speak response");
-        setIsSpeaking(false);
-      };
-
       window.speechSynthesis.speak(utterance);
     } catch (err) {
       console.error("Error in speak function:", err);
@@ -439,7 +238,6 @@ const EnhancedVoiceAssistant = () => {
       } else {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop());
-        setError("");
         recognition.start();
       }
     } catch (err) {
@@ -494,88 +292,4 @@ const EnhancedVoiceAssistant = () => {
           <button
             onClick={toggleListening}
             className={`p-4 rounded-full ${
-              isListening ? 'bg-red-500' : 'bg-blue-500'
-            } text-white shadow-lg hover:opacity-90 transition-opacity`}
-            disabled={!recognition}
-          >
-            {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-          </button>
-
-          <div className="text-sm text-gray-500">
-            {isListening ? 'Listening...' : 'Click to speak'}
-          </div>
-
-          {transcript && (
-            <div className="w-full p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-700 mb-2">You said:</h3>
-              <p className="text-gray-600">{transcript}</p>
-            </div>
-          )}
-
-          {response && (
-            <div className="w-full p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="font-medium text-gray-700">Assistant:</h3>
-                {isSpeaking ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              </div>
-              <p className="text-gray-600">{response}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-8">
-          <h3 className="font-medium text-gray-700 mb-2">Available Commands:</h3>
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Navigation:</h4>
-              <ul className="space-y-1 text-sm text-gray-600 pl-4">
-                <li>"Navigate to [destination]"</li>
-                <li>"Take me to [place name]"</li>
-                <li>"Drive to [location]"</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Time Preferences:</h4>
-              <ul className="space-y-1 text-sm text-gray-600 pl-4">
-                <li>"Yes, arrive by [time]" (e.g., "3 PM", "15:30")</li>
-                <li>"No specific time"</li>
-                <li>"Need to be there by [time]"</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Route Preferences:</h4>
-              <ul className="space-y-1 text-sm text-gray-600 pl-4">
-                <li>"Yes, prefer well-lit roads"</li>
-                <li>"Avoid highways"</li>
-                <li>"Take the fastest route"</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 mb-2">Break Planning:</h4>
-              <ul className="space-y-1 text-sm text-gray-600 pl-4">
-                <li>"Yes, plan some breaks"</li>
-                <li>"Include rest stops"</li>
-                <li>"No breaks needed"</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 mb-2">During Navigation:</h4>
-              <ul className="space-y-1 text-sm text-gray-600 pl-4">
-                <li>"Find a rest stop"</li>
-                <li>"How much longer?"</li>
-                <li>"Change route"</li>
-                <li>"Avoid upcoming traffic"</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default EnhancedVoiceAssistant;
+              isListening ? 'bg-red-500 animate-pulse' : 'bg-
