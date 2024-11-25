@@ -105,8 +105,10 @@ const EnhancedVoiceAssistant = () => {
   const processCommand = (command) => {
     const lowerCommand = command.toLowerCase();
     
-    if (lowerCommand.includes('navigate to') || lowerCommand.includes('take me to')) {
-      const destination = lowerCommand.replace(/(navigate to|take me to)/i, '').trim();
+    if (lowerCommand.includes('navigate to') || lowerCommand.includes('take me to') || lowerCommand.includes('drive to')) {
+      const destination = lowerCommand
+        .replace(/(navigate to|take me to|drive to)/i, '')
+        .trim();
       setConversationContext({
         isPlanning: true,
         destination,
@@ -175,6 +177,9 @@ const EnhancedVoiceAssistant = () => {
       }));
       return;
     }
+
+    // Fallback for unrecognized commands
+    speak("I heard you say '" + lowerCommand + "'. You can try commands like 'Navigate to [place]', 'Take me to [destination]', or 'Drive to [location]'. What would you like to do?");
   };
 
   const speak = (text) => {
