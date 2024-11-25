@@ -91,8 +91,8 @@ const EnhancedVoiceAssistant = () => {
 
   const conversationalResponse = (type, details) => {
     const responses = {
-      initial_planning: `I'll help you get to ${details.destination}. Would you like to arrive by a specific time?`,
-      weather_check: `I notice it's ${mockWeather.condition}. Would you prefer a route with good visibility and well-lit roads?`,
+      initial_planning: `I'll help you get to ${details.destination}. Would you like to arrive by a specific time? You can say 'no specific time' or specify a time like '3 PM'.`,
+      weather_check: `Great. I notice it's ${mockWeather.condition}. Would you prefer a route with good visibility and well-lit roads?`,
       break_suggestion: `This will be a ${details.duration} minute trip. Would you like me to plan any breaks along the way?`,
       route_confirmation: `I've found a route that matches your preferences. It will take about ${details.duration} minutes${
         drivingPreferences.avoidHighways ? ' avoiding highways' : ''
@@ -121,7 +121,14 @@ const EnhancedVoiceAssistant = () => {
     }
 
     if (conversationContext.isPlanning && conversationContext.stage === 'initial') {
-      if (lowerCommand.includes('yes') && lowerCommand.includes('by')) {
+      // Handle time preference responses
+      if (lowerCommand.includes('no') || lowerCommand.includes('no specific time')) {
+        // No specific time requested
+        setConversationContext(prev => ({ ...prev, stage: 'weather' }));
+        speak(conversationalResponse('weather_check', {}));
+        return;
+      } else if (lowerCommand.includes('yes') || lowerCommand.includes('by')) {
+        // Specific time requested
         const timeMatch = lowerCommand.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)?/i);
         if (timeMatch) {
           setDrivingPreferences(prev => ({
@@ -129,9 +136,12 @@ const EnhancedVoiceAssistant = () => {
             arrivalTime: timeMatch[0]
           }));
         }
+        setConversationContext(prev => ({ ...prev, stage: 'weather' }));
+        speak(conversationalResponse('weather_check', {}));
+        return;
       }
-      setConversationContext(prev => ({ ...prev, stage: 'weather' }));
-      speak(conversationalResponse('weather_check', {}));
+      // If response isn't recognized, ask for clarification
+      speak("I didn't catch that. Do you need to arrive by a specific time? You can say 'no specific time' or specify a time like '3 PM'.");
       return;
     }
 
