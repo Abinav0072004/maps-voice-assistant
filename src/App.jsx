@@ -127,19 +127,26 @@ const EnhancedVoiceAssistant = () => {
         setConversationContext(prev => ({ ...prev, stage: 'weather' }));
         speak(conversationalResponse('weather_check', {}));
         return;
-      } else if (lowerCommand.includes('yes') || lowerCommand.includes('by')) {
-        // Specific time requested
-        const timeMatch = lowerCommand.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)?/i);
-        if (timeMatch) {
-          setDrivingPreferences(prev => ({
-            ...prev,
-            arrivalTime: timeMatch[0]
-          }));
-        }
+      }
+      
+      // Check for time format (e.g., "3:30 p.m.", "3 PM", "15:30")
+      const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*((?:a|p)\.?m?\.?)?/i;
+      const timeMatch = lowerCommand.match(timeRegex) || command.match(timeRegex);
+      
+      if (timeMatch) {
+        const time = timeMatch[0];
+        setDrivingPreferences(prev => ({
+          ...prev,
+          arrivalTime: time
+        }));
         setConversationContext(prev => ({ ...prev, stage: 'weather' }));
         speak(conversationalResponse('weather_check', {}));
         return;
+      } else if (lowerCommand.includes('yes') || lowerCommand.includes('by')) {
+        speak("What time would you like to arrive? For example, you can say '3 PM' or '3:30'.");
+        return;
       }
+      
       // If response isn't recognized, ask for clarification
       speak("I didn't catch that. Do you need to arrive by a specific time? You can say 'no specific time' or specify a time like '3 PM'.");
       return;
@@ -189,7 +196,25 @@ const EnhancedVoiceAssistant = () => {
     }
 
     // Fallback for unrecognized commands
-    speak("I heard you say '" + lowerCommand + "'. You can try commands like 'Navigate to [place]', 'Take me to [destination]', or 'Drive to [location]'. What would you like to do?");
+    if (conversationContext.isPlanning) {
+      // If we're in a conversation but don't recognize the command,
+      // provide context-specific help
+      switch (conversationContext.stage) {
+        case 'initial':
+          speak("Please let me know if you need to arrive by a specific time. You can say 'no specific time' or specify a time like '3 PM'.");
+          break;
+        case 'weather':
+          speak("Would you like a route with good visibility and well-lit roads? Please say 'yes' or 'no'.");
+          break;
+        case 'breaks':
+          speak("Would you like me to plan breaks along the route? Please say 'yes' or 'no'.");
+          break;
+        default:
+          speak("I didn't understand that. What would you like to do?");
+      }
+    } else {
+      speak("I heard you say '" + lowerCommand + "'. You can try commands like 'Navigate to [place]', 'Take me to [destination]', or 'Drive to [location]'.");
+    }
   };
 
   const speak = (text) => {
